@@ -44,7 +44,7 @@ def build_schedule(principal: Decimal, monthly_rate: Decimal, term_months: int) 
     rows = []
     for month in range(1, term_months + 1):
         principal_part = base if month < term_months else outstanding
-        interest = money(outstanding * monthly_rate)
+        interest = Decimal(str(round(float(outstanding) * float(monthly_rate), 2)))
         rows.append({
             "month": month,
             "principal": principal_part,
@@ -77,7 +77,7 @@ def record_repayment(loan_id: int, amount: Decimal, external_id: str) -> Repayme
     amount = money(amount)
     if amount <= 0:
         raise ValueError("Amount must be positive")
-    interest_due = money(loan.outstanding_principal * loan.monthly_rate)
+    interest_due = Decimal(str(round(float(loan.outstanding_principal) * float(loan.monthly_rate), 2)))
     interest_part = min(amount, interest_due)
     principal_part = amount - interest_part
     if principal_part > loan.outstanding_principal:
