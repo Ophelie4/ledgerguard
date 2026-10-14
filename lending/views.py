@@ -1,4 +1,6 @@
+import logging
 from decimal import Decimal
+
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import api_view
@@ -7,6 +9,8 @@ from rest_framework.response import Response
 from . import services
 from .models import Loan
 from .serializers import LoanCreateSerializer, MomoCallbackSerializer, RepaymentSerializer
+
+logger = logging.getLogger("lending.views")
 
 
 @api_view(["POST"])
@@ -38,6 +42,8 @@ def create_repayment(request):
     s = RepaymentSerializer(data=request.data)
     s.is_valid(raise_exception=True)
     get_object_or_404(Loan, id=s.validated_data["loan_id"])
+    loan = Loan.objects.select_related("borrower").get(id=s.validated_data["loan_id"])
+    logger.info("Manual repayment from %s (%s)", loan.borrower.name, loan.borrower.phone)
     try:
         r = services.record_repayment(**s.validated_data)
     except ValueError as e:
