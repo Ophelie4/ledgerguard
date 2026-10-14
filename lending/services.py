@@ -137,3 +137,13 @@ def handle_airtel_callback(transaction_id: str, loan_id: int, amount: Decimal) -
     )
     logger.info("Airtel callback %s: %s (loan %s)", transaction_id, result["status"], loan_id)
     return {**result, "transaction_id": transaction_id}
+
+
+@transaction.atomic
+def charge_late_fee(loan_id: int) -> Decimal:
+    """2% of the outstanding principal when a borrower misses a payment."""
+    loan = Loan.objects.get(id=loan_id)
+    fee = money(loan.outstanding_principal * Decimal("0.02"))
+    LedgerEntry.objects.create(txn_id=f"LATE-{loan.id}-{uuid.uuid4().hex[:6]}",
+                               account=A.FEE_INCOME, credit=fee, memo=f"Late fee on loan {loan.id}")
+    return fee
