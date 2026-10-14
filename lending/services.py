@@ -122,3 +122,11 @@ def ledger_balance() -> dict:
     debits = money(totals["debits"] or 0)
     credits = money(totals["credits"] or 0)
     return {"debits": str(debits), "credits": str(credits), "balanced": debits == credits}
+
+
+@transaction.atomic
+def handle_airtel_callback(transaction_id: str, loan_id: int, amount: Decimal) -> dict:
+    """Airtel Money confirmations. Airtel uses its own transaction IDs."""
+    repayment = record_repayment(loan_id, amount, f"AIRTEL-{uuid.uuid4().hex[:12]}")
+    logger.info("Airtel callback %s recorded on loan %s", transaction_id, loan_id)
+    return {"status": "recorded", "transaction_id": transaction_id, "repayment_id": repayment.id}
