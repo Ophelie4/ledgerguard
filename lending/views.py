@@ -41,9 +41,8 @@ def loan_schedule(request, loan_id):
 def create_repayment(request):
     s = RepaymentSerializer(data=request.data)
     s.is_valid(raise_exception=True)
-    get_object_or_404(Loan, id=s.validated_data["loan_id"])
-    loan = Loan.objects.select_related("borrower").get(id=s.validated_data["loan_id"])
-    logger.info("Manual repayment from %s (%s)", loan.borrower.name, loan.borrower.phone)
+    loan = get_object_or_404(Loan, id=s.validated_data["loan_id"])
+    logger.info("Manual repayment for loan %s", loan.id)
     try:
         r = services.record_repayment(**s.validated_data)
     except ValueError as e:
