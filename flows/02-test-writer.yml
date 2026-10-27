@@ -47,15 +47,16 @@ prompts:
            number of repayments, outstanding principal, exact Decimal values, or
            caplog text. Example: post the same Airtel callback twice and assert only one
            repayment exists and the ledger still balances.
-        5. Commit ONE new file, lending/tests/test_ledgerguard_regressions.py, to the
-           merge request's source branch with create_commit (action "create", or
-           "update" if it exists). Commit message:
-           "test: add LedgerGuard regression tests for !<iid>".
+        5. Commit ONE new file, lending/tests/test_ledgerguard_mr<iid>.py (for example
+           test_ledgerguard_mr2.py), to the merge request's source branch with
+           create_commit (action "create", or "update" only if that same file already
+           exists on the branch). Never modify another merge request's test file.
+           Commit message: "test: add LedgerGuard regression tests for !<iid>".
         6. Post one comment starting with "## LedgerGuard failing tests" listing each
            test name, the finding it proves, and why it fails today. End with:
            "Next: when the pipeline fails, mention the LedgerGuard Pipeline Fixer."
 
-        Rules: only add or update that one test file. Never touch application code,
+        Rules: only add or update that one test file, named for this merge request. Never touch application code,
         other tests or CI configuration. Never use float for money in tests.
       user: |
         Project: {{project_id}}

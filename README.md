@@ -16,7 +16,7 @@ own service account.
 | # | Agent | Trigger | What it does |
 |---|-------|---------|--------------|
 | 1 | **Reviewer** ([flows/01-reviewer.yml](flows/01-reviewer.yml)) | Assign as MR reviewer | Reads the diff and posts one review covering four money risks: `FLOAT_MONEY`, `IDEMPOTENCY`, `UNBALANCED_LEDGER`, `PII_LEAK`. |
-| 2 | **Test Writer** ([flows/02-test-writer.yml](flows/02-test-writer.yml)) | Mention in an MR | Turns each finding into a failing pytest in `lending/tests/test_ledgerguard_regressions.py` and commits it to the MR branch. |
+| 2 | **Test Writer** ([flows/02-test-writer.yml](flows/02-test-writer.yml)) | Mention in an MR | Turns each finding into a failing pytest in `lending/tests/test_ledgerguard_mr<iid>.py` and commits it to the MR branch. |
 | 3 | **Pipeline Fixer** ([flows/03-pipeline-fixer.yml](flows/03-pipeline-fixer.yml)) | Mention in an MR | Reads the failed job logs and commits the smallest money-safe fix to the application code. It never edits tests or CI. |
 | 4 | **Deploy Verifier** ([flows/04-deploy-verifier.yml](flows/04-deploy-verifier.yml)) | Mention on a merged MR | Reads the Cloud Run deploy and the live ledger proof from CI, then reports PASS/FAIL with debits vs credits. |
 | 5 | **Release Gate** ([flows/05-release-gate.yml](flows/05-release-gate.yml)) | Mention on an MR or issue | Collects every signal and gives GO or NO-GO. A human makes the final call by running the manual `release-production` job. |
