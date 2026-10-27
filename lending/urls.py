@@ -8,4 +8,5 @@ urlpatterns = [
     path("repayments", views.create_repayment),
     path("momo/callback", views.momo_callback),
     path("ledger/balance", views.ledger_balance),
+    path("airtel/callback", views.airtel_callback),
 ]

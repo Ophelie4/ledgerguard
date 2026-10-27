@@ -122,3 +122,18 @@ def ledger_balance() -> dict:
     debits = money(totals["debits"] or 0)
     credits = money(totals["credits"] or 0)
     return {"debits": str(debits), "credits": str(credits), "balanced": debits == credits}
+
+
+@transaction.atomic
+def handle_airtel_callback(transaction_id: str, loan_id: int, amount: Decimal) -> dict:
+    """Airtel Money confirmations. Airtel uses its own transaction IDs.
+
+    The Airtel transaction_id is the unique reference, so a retried callback is
+    deduplicated by handle_momo_callback (get_or_create) and posts nothing twice.
+    """
+    result = handle_momo_callback(
+        f"AIRTEL-{transaction_id}", loan_id, amount,
+        payload={"provider": "airtel", "transaction_id": transaction_id},
+    )
+    logger.info("Airtel callback %s: %s (loan %s)", transaction_id, result["status"], loan_id)
+    return {**result, "transaction_id": transaction_id}

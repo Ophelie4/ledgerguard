@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import api_view
@@ -62,3 +63,11 @@ def momo_callback(request):
 @api_view(["GET"])
 def ledger_balance(request):
     return Response(services.ledger_balance())
+
+
+@api_view(["POST"])
+def airtel_callback(request):
+    d = request.data
+    get_object_or_404(Loan, id=d["loan_id"])
+    result = services.handle_airtel_callback(d["transaction_id"], int(d["loan_id"]), Decimal(d["amount"]))
+    return Response(result)
