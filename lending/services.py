@@ -141,9 +141,21 @@ def handle_airtel_callback(transaction_id: str, loan_id: int, amount: Decimal) -
 
 @transaction.atomic
 def charge_late_fee(loan_id: int) -> Decimal:
-    """2% of the outstanding principal when a borrower misses a payment."""
-    loan = Loan.objects.get(id=loan_id)
+    """2% of the outstanding principal when a borrower misses a payment.
+
+    The fee is keyed on the loan and the next unpaid installment number, so a retry
+    or double run for the same missed payment charges nothing more. The loan row is
+    locked so concurrent runs and repayments are serialized.
+    """
+    loan = Loan.objects.select_for_update().get(id=loan_id)
     fee = money(loan.outstanding_principal * Decimal("0.02"))
-    LedgerEntry.objects.create(txn_id=f"LATE-{loan.id}-{uuid.uuid4().hex[:6]}",
-                               account=A.FEE_INCOME, credit=fee, memo=f"Late fee on loan {loan.id}")
+    installment = loan.repayments.count() + 1
+    txn_id = f"LATE-{loan.id}-{installment}"
+    if LedgerEntry.objects.filter(txn_id=txn_id).exists():
+        logger.info("Late fee %s already charged, ignoring retry", txn_id)
+        return fee
+    post(txn_id, [
+        (A.LOANS_RECEIVABLE, fee, 0),
+        (A.FEE_INCOME, 0, fee),
+    ], memo=f"Late fee on loan {loan.id}")
     return fee
