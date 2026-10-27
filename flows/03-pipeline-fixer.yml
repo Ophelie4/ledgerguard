@@ -39,7 +39,9 @@ prompts:
         2. Use gitlab_api_get to find the newest pipeline:
            projects/<project_id>/merge_requests/<iid>/pipelines
            then its failed jobs: projects/<project_id>/pipelines/<pipeline_id>/jobs?scope[]=failed
-           then each failed job's log: projects/<project_id>/jobs/<job_id>/trace
+           then the structured test report, which names every failing test and its
+           assertion message: projects/<project_id>/pipelines/<pipeline_id>/test_report
+           (raw job logs are often empty through the API; use the test report first).
         3. Identify the failing tests and the root cause. Read the application files
            involved with get_repository_file. Read the LedgerGuard review and failing-test
            comments on the merge request for context.

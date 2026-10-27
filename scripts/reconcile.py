@@ -15,6 +15,7 @@ import requests
 
 BASE = os.environ["STAGING_URL"].rstrip("/")
 checks = []
+totals = {}
 
 
 def check(ok, msg):
@@ -28,6 +29,8 @@ def finish(code):
         "url": BASE,
         "commit": os.environ.get("CI_COMMIT_SHA", "local"),
         "checks": checks,
+        "debits": totals.get("debits"),
+        "credits": totals.get("credits"),
         "verdict": "VERIFIED" if code == 0 else "NOT VERIFIED",
     }
     with open("ledger-proof.json", "w") as f:
@@ -55,6 +58,7 @@ ok &= check(second.ok and second.json().get("status") == "duplicate ignored",
             "duplicate callback ignored")
 
 bal = requests.get(f"{BASE}/ledger/balance", timeout=60).json()
+totals.update(debits=bal["debits"], credits=bal["credits"])
 print(f"Debits {bal['debits']}  Credits {bal['credits']}")
 ok &= check(bal["debits"] == bal["credits"] and bal["balanced"] is True, "ledger balances")
 

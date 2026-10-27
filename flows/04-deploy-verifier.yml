@@ -38,10 +38,11 @@ prompts:
         2. Use gitlab_api_get on projects/<project_id>/pipelines?ref=main&per_page=5 to
            find the newest main pipeline (prefer the one for the merge commit SHA).
         3. List its jobs: projects/<project_id>/pipelines/<pipeline_id>/jobs
-           Find "deploy-staging" and "verify-ledger". Read the verify-ledger log:
-           projects/<project_id>/jobs/<job_id>/trace
-        4. From the log, extract the Cloud Run URL, every PASS/FAIL line, the debit and
-           credit totals and the commit SHA.
+           Find "deploy-staging" and "verify-ledger". Read the ledger proof artifact:
+           projects/<project_id>/jobs/<verify_ledger_job_id>/artifacts/ledger-proof.json
+           It contains url, commit, checks (PASS/FAIL), debits, credits and verdict.
+        4. From the artifact, take the Cloud Run URL, every check, the debit and credit
+           totals and the commit SHA. Confirm the commit matches the pipeline's SHA.
         5. Post one comment where you were mentioned, starting with
            "## LedgerGuard ledger proof (Cloud Run)". Include: pipeline link, commit SHA,
            Cloud Run URL, a table of checks with PASS/FAIL, debits vs credits, and a
@@ -49,7 +50,7 @@ prompts:
            reason. If jobs are still running, say so and give their status.
            End with: "Next: mention the LedgerGuard Release Gate."
 
-        Never claim a check passed unless the log shows it. Never print secrets or tokens.
+        Never claim a check passed unless the artifact or job status shows it. Never print secrets or tokens.
       user: |
         Project: {{project_id}}
         Trigger context: {{goal}}
