@@ -1,4 +1,17 @@
-stages: [test]
+# LedgerGuard pipeline
+#   test    -> unit tests (incl. agent-written regression tests), SAST, secret detection
+#   deploy  -> main only: build and deploy to Cloud Run staging (keyless, via Workload Identity Federation)
+#   verify  -> main only: live ledger proof against staging (scripts/reconcile.py)
+#   release -> main only: MANUAL, blocking. A human approves after the LedgerGuard Release Gate.
+#              Promotes the exact image verified on staging, then re-runs the ledger proof.
+
+stages: [test, deploy, verify, release]
+
+variables:
+  GCP_PROJECT: ledgerguard-2026ob
+  GCP_REGION: us-east1
+  WIF_PROVIDER: projects/844779332358/locations/global/workloadIdentityPools/gitlab-pool/providers/gitlab-provider
+  DEPLOY_SA: ledgerguard-deployer@ledgerguard-2026ob.iam.gserviceaccount.com
 
 workflow:
   rules:
@@ -21,4 +34,84 @@ unit-tests:
     when: always
     reports:
       junit: report.xml
-      
+
+.gcp-auth:
+  image: gcr.io/google.com/cloudsdktool/google-cloud-cli:slim
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://iam.googleapis.com/projects/844779332358/locations/global/workloadIdentityPools/gitlab-pool/providers/gitlab-provider
+  before_script:
+    - echo "$GITLAB_OIDC_TOKEN" > .oidc_token
+    - gcloud iam workload-identity-pools create-cred-config "$WIF_PROVIDER"
+        --service-account="$DEPLOY_SA"
+        --credential-source-file=.oidc_token
+        --output-file=.gcp_creds.json
+    - gcloud auth login --cred-file=.gcp_creds.json --quiet
+    - gcloud config set project "$GCP_PROJECT"
+
+.main-only:
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
+
+deploy-staging:
+  stage: deploy
+  extends: [.gcp-auth, .main-only]
+  needs: [unit-tests]
+  environment:
+    name: staging
+    url: $STAGING_URL
+  script:
+    - SECRET="$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')"
+    - gcloud run deploy ledgerguard-staging
+        --source . --region "$GCP_REGION"
+        --allow-unauthenticated --max-instances 1 --memory 512Mi
+        --set-env-vars "DJANGO_SECRET_KEY=$SECRET,ALLOWED_HOSTS=*"
+        --labels "commit=$CI_COMMIT_SHORT_SHA" --quiet
+    - URL="$(gcloud run services describe ledgerguard-staging --region "$GCP_REGION" --format 'value(status.url)')"
+    - IMAGE="$(gcloud run services describe ledgerguard-staging --region "$GCP_REGION" --format 'value(spec.template.spec.containers[0].image)')"
+    - echo "Deployed $CI_COMMIT_SHORT_SHA to $URL ($IMAGE)"
+    - printf 'STAGING_URL=%s\nSTAGING_IMAGE=%s\n' "$URL" "$IMAGE" > deploy.env
+  artifacts:
+    reports:
+      dotenv: deploy.env
+
+verify-ledger:
+  stage: verify
+  extends: .main-only
+  image: python:3.12-slim
+  needs: [deploy-staging]
+  script:
+    - pip install --quiet requests
+    - python scripts/reconcile.py
+  artifacts:
+    when: always
+    paths: [ledger-proof.json]
+
+release-production:
+  stage: release
+  extends: .gcp-auth
+  needs: [deploy-staging, verify-ledger]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
+      when: manual
+      allow_failure: false
+  environment:
+    name: production
+    url: $PROD_URL
+  script:
+    - SECRET="$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')"
+    - echo "Promoting verified image $STAGING_IMAGE"
+    - gcloud run deploy ledgerguard
+        --image "$STAGING_IMAGE" --region "$GCP_REGION"
+        --allow-unauthenticated --max-instances 1 --memory 512Mi
+        --set-env-vars "DJANGO_SECRET_KEY=$SECRET,ALLOWED_HOSTS=*"
+        --labels "commit=$CI_COMMIT_SHORT_SHA" --quiet
+    - PROD_URL="$(gcloud run services describe ledgerguard --region "$GCP_REGION" --format 'value(status.url)')"
+    - echo "PROD_URL=$PROD_URL" > release.env
+    - apt-get -qq update >/dev/null && apt-get -qq install -y python3-requests >/dev/null
+    - STAGING_URL="$PROD_URL" python3 scripts/reconcile.py
+  artifacts:
+    when: always
+    paths: [ledger-proof.json]
+    reports:
+      dotenv: release.env

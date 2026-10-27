@@ -1,93 +1,83 @@
-# ledgerguard
+# LedgerGuard
 
+**Five GitLab Duo agents that guard money code for micro-lenders and mobile-money apps.**
 
+In lending software the worst bugs don't crash. They quietly move money wrong: interest
+computed with floats, a mobile-money callback retried and credited twice, a ledger entry
+with no matching side, a borrower's phone number in the logs. LedgerGuard catches these
+bugs, proves them with tests, fixes them, proves the live ledger still balances on Google
+Cloud Run, and stops at a human before anything reaches production.
 
-## Getting started
+## The five agents
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+Each agent is a custom GitLab Duo Agent Platform flow in [`flows/`](flows/), running as its
+own service account.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+| # | Agent | Trigger | What it does |
+|---|-------|---------|--------------|
+| 1 | **Reviewer** ([flows/01-reviewer.yml](flows/01-reviewer.yml)) | Assign as MR reviewer | Reads the diff and posts one review covering four money risks: `FLOAT_MONEY`, `IDEMPOTENCY`, `UNBALANCED_LEDGER`, `PII_LEAK`. |
+| 2 | **Test Writer** ([flows/02-test-writer.yml](flows/02-test-writer.yml)) | Mention in an MR | Turns each finding into a failing pytest in `lending/tests/test_ledgerguard_regressions.py` and commits it to the MR branch. |
+| 3 | **Pipeline Fixer** ([flows/03-pipeline-fixer.yml](flows/03-pipeline-fixer.yml)) | Mention in an MR | Reads the failed job logs and commits the smallest money-safe fix to the application code. It never edits tests or CI. |
+| 4 | **Deploy Verifier** ([flows/04-deploy-verifier.yml](flows/04-deploy-verifier.yml)) | Mention on a merged MR | Reads the Cloud Run deploy and the live ledger proof from CI, then reports PASS/FAIL with debits vs credits. |
+| 5 | **Release Gate** ([flows/05-release-gate.yml](flows/05-release-gate.yml)) | Mention on an MR or issue | Collects every signal and gives GO or NO-GO. A human makes the final call by running the manual `release-production` job. |
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/opheliekeza/ledgerguard.git
-git branch -M main
-git push -uf origin main
+MR opened ──► 1 Reviewer ──► 2 Test Writer ──► pipeline red ──► 3 Pipeline Fixer ──► pipeline green
+                                                                                        │ merge
+   human approves ◄── 5 Release Gate (GO / NO-GO) ◄── 4 Deploy Verifier ◄── Cloud Run staging + ledger proof
+        │
+        └──► release-production: same image promoted, ledger proof re-run on production
 ```
 
-## Integrate with your tools
+## Pipeline ([.gitlab-ci.yml](.gitlab-ci.yml))
 
-* [Set up project integrations](https://gitlab.com/opheliekeza/ledgerguard/-/settings/integrations)
+| Stage | Job | Runs on |
+|-------|-----|---------|
+| test | `unit-tests` (pytest), `semgrep-sast`, `secret_detection` | every MR and branch |
+| deploy | `deploy-staging`: Cloud Run service `ledgerguard-staging` | `main` |
+| verify | `verify-ledger`: [scripts/reconcile.py](scripts/reconcile.py) against the live URL, saved as `ledger-proof.json` | `main` |
+| release | `release-production`: **manual and blocking**. Promotes the verified image to service `ledgerguard`, then re-runs the proof | `main`, human approval |
 
-## Collaborate with your team
+Deploys are keyless. GitLab's OIDC token is exchanged through Google Cloud Workload
+Identity Federation for a deployer service account that is restricted to this project. No
+service-account keys are stored anywhere.
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+## The app being guarded
 
-## Test and Deploy
+A small Django REST lending API (`lending/`):
 
-Use the built-in continuous integration in GitLab.
+- **Double-entry ledger.** `services.post()` refuses any transaction whose debits don't equal its credits.
+- **Decimal money only.** `money()` is the single rounding rule. Declining-balance schedules always sum exactly to the principal.
+- **Idempotent mobile-money callbacks.** Each callback has a unique `external_id` and uses `get_or_create`.
+- **Masked phone numbers** in every log line.
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+Endpoints: `POST /loans`, `GET /loans/<id>/schedule`, `POST /repayments`,
+`POST /momo/callback`, `GET /ledger/balance`.
 
-***
+## Demo branches (planted money bugs)
 
-# Editing this README
+| Branch | Bug | Category |
+|--------|-----|----------|
+| `bug/airtel-callback` | Airtel callback uses a random reference, so a retry credits the borrower twice | IDEMPOTENCY |
+| `bug/float-interest` | Interest computed with `float` and `round()` | FLOAT_MONEY |
+| `bug/late-fee` | Late fee debited with no matching credit | UNBALANCED_LEDGER |
+| `bug/phone-in-logs` | Raw phone number written to logs | PII_LEAK |
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+## Run locally
 
-## Suggestions for a good README
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+pytest                       # unit, ledger and API tests
+python manage.py migrate && python manage.py runserver
+STAGING_URL=http://127.0.0.1:8000 python scripts/reconcile.py   # ledger proof
+```
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+## Set up the agents in your own GitLab project
 
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+1. In **AI → Flows → New flow**, paste each file from `flows/`. Then enable it in the project with the trigger from the table above.
+2. Set up Google Cloud Workload Identity Federation for your project path (see [docs/gcp-setup.md](docs/gcp-setup.md)). Then update the variables at the top of `.gitlab-ci.yml`.
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+MIT. Built by Ophelie Bisamaza, with help from Claude (Anthropic) as a coding assistant.

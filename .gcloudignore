@@ -1,0 +1,10 @@
+.git
+.gitignore
+.venv/
+__pycache__/
+*.pyc
+db.sqlite3
+.pytest_cache/
+.oidc_token
+.gcp_creds.json
+flows/
