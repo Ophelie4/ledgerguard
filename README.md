@@ -14,7 +14,7 @@ LedgerGuard started as my solo entry to **[Life After Code: The Path to Producti
 
 **What the hackathon asked for:** build on the **GitLab Duo Agent Platform**, using custom AI agents and flows that do real work across the software lifecycle (plan, create, verify, secure, release and more) inside a public, MIT-licensed GitLab project. Each entrant picked a path (start a new project or bring an existing one) and a level of autonomy (assisted, supervised or hands-off). Deploying on Google Cloud earned bonus points.
 
-**My entry** ([Devpost page](https://devpost.com/software/ledgerguard-b47ur6)) took the *Start Fresh, Supervised* path. I co-founded a micro-lending company in Rwanda, and the bugs that worry me most in that kind of software are the silent ones that move money wrong. So I built an agent that reviews merge requests for exactly those risks.
+**My entry** took the *Start Fresh, Supervised* path. I co-founded a micro-lending company in Rwanda, and the bugs that worry me most in that kind of software are the silent ones that move money wrong. So I built an agent that reviews merge requests for exactly those risks.
 
 - **Submitted on October 27, 2026:** the LedgerGuard Reviewer agent (agent 1 below), the Django lending API it guards, and a CI pipeline with tests and security scans. In the demo, the Reviewer found a real double-credit bug in a mobile-money callback on its own.
 - **After the deadline:** I extended it into the full five-agent pipeline described below, adding failing-test writing, pipeline fixing, a live ledger proof on Google Cloud Run and a human-approved release gate. The hackathon entry itself was left unchanged.
