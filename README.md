@@ -8,6 +8,19 @@ with no matching side, a borrower's phone number in the logs. LedgerGuard catche
 bugs, proves them with tests, fixes them, proves the live ledger still balances on Google
 Cloud Run, and stops at a human before anything reaches production.
 
+## Built for the GitLab Transcend Hackathon
+
+LedgerGuard started as my solo entry to **[Life After Code: The Path to Production at the Speed of Imagination](https://gitlab-transcend.devpost.com/)**, the GitLab Transcend Hackathon on Devpost (October 2026), sponsored by GitLab, Google Cloud and Anthropic.
+
+**What the hackathon asked for:** build on the **GitLab Duo Agent Platform**, using custom AI agents and flows that do real work across the software lifecycle (plan, create, verify, secure, release and more) inside a public, MIT-licensed GitLab project. Each entrant picked a path (start a new project or bring an existing one) and a level of autonomy (assisted, supervised or hands-off). Deploying on Google Cloud earned bonus points.
+
+**My entry** ([Devpost page](https://devpost.com/software/ledgerguard-b47ur6)) took the *Start Fresh, Supervised* path. I co-founded a micro-lending company in Rwanda, and the bugs that worry me most in that kind of software are the silent ones that move money wrong. So I built an agent that reviews merge requests for exactly those risks.
+
+- **Submitted on October 27, 2026:** the LedgerGuard Reviewer agent (agent 1 below), the Django lending API it guards, and a CI pipeline with tests and security scans. In the demo, the Reviewer found a real double-credit bug in a mobile-money callback on its own.
+- **After the deadline:** I extended it into the full five-agent pipeline described below, adding failing-test writing, pipeline fixing, a live ledger proof on Google Cloud Run and a human-approved release gate. The hackathon entry itself was left unchanged.
+
+The agents and the pipeline run on GitLab. This GitHub repository is a copy for my portfolio, so nothing here runs automatically.
+
 ## The five agents
 
 Each agent is a custom GitLab Duo Agent Platform flow in [`flows/`](flows/), running as its
